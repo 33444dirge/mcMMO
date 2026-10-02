@@ -16,6 +16,7 @@ import com.gmail.nossr50.mcMMO;
 import com.gmail.nossr50.metadata.MobMetaFlagType;
 import com.gmail.nossr50.runnables.TravelingBlockMetaCleanup;
 import com.gmail.nossr50.skills.archery.Archery;
+import com.gmail.nossr50.skills.acrobatics.DodgeXpTracker;
 import com.gmail.nossr50.skills.crossbows.Crossbows;
 import com.gmail.nossr50.skills.mining.BlastMining;
 import com.gmail.nossr50.skills.mining.MiningManager;
@@ -49,6 +50,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.TNTPrimed;
@@ -300,6 +302,14 @@ public class EntityListener implements Listener {
             } else if (isTracked) {
                 BlockUtils.setUnnaturalBlock(block);
                 entity.removeMetadata(MetadataConstants.METADATA_KEY_TRAVELING_BLOCK, pluginRef);
+            }
+        } else if (entity.getType() == EntityType.WITHER
+                || entity.getType() == EntityType.ENDER_DRAGON
+                || entity.getType() == EntityType.SILVERFISH
+                || entity.getType() == EntityType.RAVAGER) {
+            // Wither, EnderDragon, Silverfish, and Ravager breaking blocks should clear tracking
+            if (mcMMO.getUserBlockTracker().isIneligible(block)) {
+                mcMMO.getUserBlockTracker().setEligible(block);
             }
         } else if ((block.getType() == Material.REDSTONE_ORE || block.getType().getKey().getKey()
                 .equalsIgnoreCase(DEEPSLATE_REDSTONE_ORE))) {
@@ -783,14 +793,19 @@ public class EntityListener implements Listener {
 
         // A dying summon is no longer valid, so it has to be untracked here rather than killed
         mcMMO.getTransientEntityTracker().removeTrackedEntity(entity);
+        if (entity instanceof Mob mob) {
+            DodgeXpTracker.remove(mob);
+        }
 
         /* WORLD BLACKLIST CHECK */
         if (WorldBlacklist.isWorldBlacklisted(event.getEntity().getWorld())) {
+            Archery.removeTrackedEntity(entity);
             return;
         }
 
         if (ExperienceConfig.getInstance().isNPCInteractionPrevented()
                 && Misc.isNPCEntityExcludingVillagers(entity)) {
+            Archery.removeTrackedEntity(entity);
             return;
         }
 
@@ -922,35 +937,38 @@ public class EntityListener implements Listener {
 
         Entity entity = event.getEntity();
 
-        if (!(entity instanceof TNTPrimed)) {
-            return;
-        }
+        // Handle TNT blast mining
+        if (entity instanceof TNTPrimed) {
+            final Player player = BlastMining.resolveTntOwner(entity);
 
-        final Player player = BlastMining.resolveTntOwner(entity);
+            if (UserManager.hasPlayerDataKey(player)) {
+                /* WORLD GUARD MAIN FLAG CHECK */
+                if (WorldGuardUtils.isWorldGuardLoaded()) {
+                    if (!WorldGuardManager.getInstance().hasMainFlag(player)) {
+                        return;
+                    }
+                }
 
-        if (!UserManager.hasPlayerDataKey(player)) {
-            return;
-        }
+                final McMMOPlayer mmoPlayer = UserManager.getPlayer(player);
 
-        /* WORLD GUARD MAIN FLAG CHECK */
-        if (WorldGuardUtils.isWorldGuardLoaded()) {
-            if (!WorldGuardManager.getInstance().hasMainFlag(player)) {
-                return;
+                //Profile not loaded
+                if (mmoPlayer != null) {
+                    MiningManager miningManager = mmoPlayer.getMiningManager();
+
+                    if (miningManager.canUseBlastMining()) {
+                        miningManager.blastMiningDropProcessing(event.getYield(), event);
+    //                    event.setYield(0);
+                    }
+                }
             }
         }
 
-        final McMMOPlayer mmoPlayer = UserManager.getPlayer(player);
-
-        //Profile not loaded
-        if (mmoPlayer == null) {
-            return;
-        }
-
-        MiningManager miningManager = mmoPlayer.getMiningManager();
-
-        if (miningManager.canUseBlastMining()) {
-            miningManager.blastMiningDropProcessing(event.getYield(), event);
-//            event.setYield(0);
+        // Clear block tracking for all exploded blocks (Creeper, Wither, EnderCrystal, TNT, etc.)
+        // This prevents player-placed blocks from permanently marking coordinates as ineligible
+        for (Block block : event.blockList()) {
+            if (mcMMO.getUserBlockTracker().isIneligible(block)) {
+                mcMMO.getUserBlockTracker().setEligible(block);
+            }
         }
     }
 

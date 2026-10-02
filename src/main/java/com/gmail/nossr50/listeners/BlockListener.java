@@ -794,6 +794,22 @@ public class BlockListener implements Listener {
     }
 
     /**
+     * Handle BlockExplode events (bed/respawn anchor explosions).
+     *
+     * @param event The event to monitor
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockExplode(org.bukkit.event.block.BlockExplodeEvent event) {
+        // Clear block tracking for all exploded blocks (bed, respawn anchor, etc.)
+        // This prevents player-placed blocks from permanently marking coordinates as ineligible
+        for (Block block : event.blockList()) {
+            if (mcMMO.getUserBlockTracker().isIneligible(block)) {
+                mcMMO.getUserBlockTracker().setEligible(block);
+            }
+        }
+    }
+
+    /**
      * Clean up ability tools after a block break event.
      *
      * @param mmoPlayer The player
