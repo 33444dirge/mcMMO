@@ -26,6 +26,7 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.util.BitSet;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
@@ -85,8 +86,13 @@ public class McMMOSimpleRegionFile implements AutoCloseable {
                 raf.writeInt(DEFAULT_SEGMENT_EXPONENT);
             }
 
-            raf.seek(SEEK_FILE_INFO);
-            this.segmentExponent = raf.readInt();
+            // RandomAccessFile.readInt() performs four native reads per integer. Decode
+            // the header in memory to avoid thousands of reads while a region tick waits.
+            final byte[] headerBytes = new byte[SEEK_FILE_INFO + Integer.BYTES];
+            raf.seek(0);
+            raf.readFully(headerBytes);
+            final ByteBuffer header = ByteBuffer.wrap(headerBytes);
+            this.segmentExponent = header.getInt(SEEK_FILE_INFO);
             this.segmentMask = (1 << segmentExponent) - 1;
 
             // Mark reserved segments reserved
@@ -94,14 +100,12 @@ public class McMMOSimpleRegionFile implements AutoCloseable {
             segments.set(0, reservedSegments, true);
 
             // Read chunk header data
-            raf.seek(SEEK_CHUNK_SEGMENT_INDICES);
             for (int i = 0; i < NUM_CHUNKS; i++) {
-                chunkSegmentIndex[i] = raf.readInt();
+                chunkSegmentIndex[i] = header.getInt(SEEK_CHUNK_SEGMENT_INDICES + Integer.BYTES * i);
             }
 
-            raf.seek(SEEK_CHUNK_BYTE_LENGTHS);
             for (int i = 0; i < NUM_CHUNKS; i++) {
-                chunkNumBytes[i] = raf.readInt();
+                chunkNumBytes[i] = header.getInt(SEEK_CHUNK_BYTE_LENGTHS + Integer.BYTES * i);
                 if (chunkSegmentIndex[i] < 0 || chunkNumBytes[i] < 0) {
                     throw new IOException("Corrupt chunk header at index " + i + " (segment="
                             + chunkSegmentIndex[i] + ", bytes=" + chunkNumBytes[i] + ")");
