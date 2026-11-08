@@ -37,6 +37,14 @@ public class Archery {
         trackedEntities.remove(trackedEntity.getID());
     }
 
+    /** Removes tracking for an entity that is being unloaded or destroyed. */
+    public static void removeTrackedEntity(final @NotNull LivingEntity livingEntity) {
+        final TrackedEntity trackedEntity = trackedEntities.remove(livingEntity.getUniqueId());
+        if (trackedEntity != null) {
+            trackedEntity.cancel();
+        }
+    }
+
     /**
      * Check for arrow retrieval.
      *

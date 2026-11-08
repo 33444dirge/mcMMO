@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -77,6 +78,21 @@ class ArcheryTest extends MMOTestEnvironment {
         when(target.getLocation()).thenReturn(new Location(world, 0, 64, 0));
         when(target.isValid()).thenReturn(true);
         return target;
+    }
+
+    @Test
+    void removalCancelsTrackerAndPreventsArrowRetrieval() {
+        final LivingEntity target = mockTrackedTarget();
+        try (var trackers = mockConstruction(TrackedEntity.class);
+             var items = mockStatic(ItemUtils.class)) {
+            Archery.incrementTrackerValue(target);
+            final TrackedEntity tracker = trackers.constructed().get(0);
+            Archery.removeTrackedEntity(target);
+            Archery.removeTrackedEntity(target);
+            verify(tracker).cancel();
+            Archery.arrowRetrievalCheck(target);
+            items.verifyNoInteractions();
+        }
     }
 
     @Nested

@@ -2,7 +2,11 @@ package com.gmail.nossr50.skills.acrobatics;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import java.util.UUID;
+import org.bukkit.entity.Mob;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +26,23 @@ class DodgeXpTrackerTest {
     @AfterEach
     void tearDown() {
         DodgeXpTracker.clearAll();
+    }
+
+    @Test
+    void removalReleasesOnlyTheSelectedMobAndIsIdempotent() {
+        final Mob mob = mock(Mob.class);
+        final UUID id = UUID.randomUUID();
+        final UUID otherId = UUID.randomUUID();
+        when(mob.getUniqueId()).thenReturn(id);
+        for (int i = 0; i <= DodgeXpTracker.MAX_XP_REWARDS_PER_MOB; i++) {
+            DodgeXpTracker.tryConsumeXpReward(id, START);
+            DodgeXpTracker.tryConsumeXpReward(otherId, START);
+        }
+        DodgeXpTracker.remove(mob);
+        DodgeXpTracker.remove(mob);
+        assertThat(DodgeXpTracker.trackedMobCount()).isEqualTo(1);
+        assertThat(DodgeXpTracker.tryConsumeXpReward(id, START)).isTrue();
+        assertThat(DodgeXpTracker.tryConsumeXpReward(otherId, START)).isFalse();
     }
 
     @Test

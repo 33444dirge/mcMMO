@@ -89,4 +89,8 @@ public final class DodgeXpTracker {
         REWARDS_BY_MOB.clear();
         LAST_SWEEP_TIME.set(0);
     }
+    /** Releases reward state when an entity is unloaded or destroyed. */
+    public static void remove(final @NotNull Mob mob) {
+        REWARDS_BY_MOB.remove(mob.getUniqueId());
+    }
 }
